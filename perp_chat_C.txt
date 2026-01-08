@@ -1,0 +1,68 @@
+import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM
+
+# -----------------------------
+# Model & tokenizer
+# -----------------------------
+model_name = "google/gemma-3-1b-it"
+
+tokenizer = AutoTokenizer.from_pretrained(model_name)
+model = AutoModelForCausalLM.from_pretrained(
+    model_name,
+    torch_dtype=torch.float16,
+    device_map="auto",
+)
+model.eval()
+
+# -----------------------------
+# Chat messages
+# -----------------------------
+messages = [
+    {"role": "user", "content": "The capital of France is Paris."},
+    {"role": "assistant", "content": "The capital of France is Paris."},
+]
+
+# Apply chat template
+encoded = tokenizer.apply_chat_template(
+    messages,
+    return_tensors="pt",
+    tokenize=True,
+)
+
+input_ids = encoded.to(model.device)
+
+# -----------------------------
+# Build labels (mask non-assistant tokens)
+# -----------------------------
+labels = input_ids.clone()
+
+# Token IDs for role markers
+user_token_id = tokenizer.convert_tokens_to_ids("<user>")
+assistant_token_id = tokenizer.convert_tokens_to_ids("<assistant>")
+
+# Default: mask everything
+labels[:] = -100
+
+# Identify assistant spans
+is_assistant = False
+for i, token_id in enumerate(input_ids[0]):
+    if token_id == assistant_token_id:
+        is_assistant = True
+        continue
+    if token_id == user_token_id:
+        is_assistant = False
+        continue
+    if is_assistant:
+        labels[0, i] = input_ids[0, i]
+
+# -----------------------------
+# Forward pass
+# -----------------------------
+with torch.no_grad():
+    outputs = model(input_ids=input_ids, labels=labels)
+
+loss = outputs.loss
+perplexity = torch.exp(loss)
+
+print(f"Loss: {loss.item():.4f}")
+print(f"Perplexity: {perplexity.item():.4f}")
