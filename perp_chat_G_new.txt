@@ -1,0 +1,45 @@
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+model_id = "google/gemma-3-1b-it"
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, device_map="auto")
+
+def get_true_perplexity(prompt, completion):
+    # 1. Format the conversation
+    messages = [
+        {"role": "user", "content": prompt},
+        {"role": "model", "content": completion}
+    ]
+    
+    # 2. Use the template to create the full string
+    # This adds <bos>, <start_of_turn>, etc. automatically
+    full_text = tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=False)
+    
+    # 3. Tokenize the full text
+    inputs = tokenizer(full_text, return_tensors="pt", add_special_tokens=False).to(model.device)
+    input_ids = inputs["input_ids"]
+    
+    # 4. Create Labels and Mask the Prompt
+    labels = input_ids.clone()
+    
+    # We only want to calculate loss on the completion part
+    # Find where the model starts: search for the "<start_of_turn>model\n" tokens
+    prompt_messages = [{"role": "user", "content": prompt}]
+    prompt_text = tokenizer.apply_chat_template(prompt_messages, tokenize=False, add_generation_prompt=True)
+    prompt_tokenized = tokenizer(prompt_text, return_tensors="pt", add_special_tokens=False)
+    prompt_len = prompt_tokenized.input_ids.shape[1]
+    
+    # Mask the prompt (set to -100)
+    labels[:, :prompt_len] = -100
+    
+    # 5. Calculate Loss
+    with torch.no_grad():
+        outputs = model(input_ids, labels=labels)
+        loss = outputs.loss # This is now ONLY the average loss of the completion
+        
+    return loss.item(), torch.exp(loss).item()
+
+# Test with your Paris example
+loss, ppl = get_true_perplexity("What is the capital of France?", "The capital of France is Paris.")
+print(f"Corrected Loss: {loss:.4f} | Corrected Perplexity: {ppl:.4f}")
