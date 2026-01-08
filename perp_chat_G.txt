@@ -1,0 +1,45 @@
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+def calculate_gemma_perplexity(prompt, statement, model_id="google/gemma-3-1b-it"):
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    
+    tokenizer = AutoTokenizer.from_pretrained(model_id)
+    model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16).to(device)
+
+    # 1. Format as a conversation
+    messages = [
+        {"role": "user", "content": prompt},
+        {"role": "model", "content": statement},
+    ]
+    
+    # Apply the template and tokenize
+    # add_generation_prompt=False because we are providing the full conversation
+    tokenized_chat = tokenizer.apply_chat_template(messages, tokenize=True, return_tensors="pt").to(device)
+    
+    # 2. Mask the prompt tokens in the labels
+    # We only want the loss for the "model" response part
+    # To do this, we find where the "model" turn starts
+    labels = tokenized_chat.clone()
+    
+    # Generic logic: everything before the statement is masked with -100
+    # A more precise way is to tokenize the prompt separately to find the length
+    prompt_ids = tokenizer.apply_chat_template(messages[:1], tokenize=True, add_generation_prompt=True, return_tensors="pt")
+    prompt_len = prompt_ids.shape[1]
+    
+    labels[:, :prompt_len] = -100 
+
+    # 3. Compute loss
+    with torch.no_grad():
+        outputs = model(tokenized_chat, labels=labels)
+        loss = outputs.loss # Mean loss of unmasked tokens
+    
+    perplexity = torch.exp(loss).item()
+    return perplexity
+
+# Example Usage
+prompt_text = "What is the capital of France?"
+statement_text = "The capital of France is Paris."
+
+ppl = calculate_gemma_perplexity(prompt_text, statement_text)
+print(f"Statement Perplexity: {ppl:.4f}")
