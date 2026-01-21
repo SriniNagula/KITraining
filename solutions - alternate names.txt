@@ -1,0 +1,13 @@
+Banking Sales and Support Suite → Retail & Commercial Banking Engagement Suite
+
+Data, Ops and Engineering Suite → Enterprise Data, Operations & Engineering Platform
+
+Insurance Sales, Services and Claims Suite → End-to-End Insurance Lifecycle Management Suite
+
+Legacy Modernization and Migration Suite → Application Modernization & Cloud Transformation Suite
+
+Sales, Support and Business Insights Enablers → Customer Engagement & Business Intelligence Enablement Suite
+
+Wealth and Retirement Planning Suite → Wealth, Retirement & Financial Planning Solutions Suite
+
+Risk, Compliance and Governance Suite → Enterprise Risk, Compliance & Governance Management Suite
